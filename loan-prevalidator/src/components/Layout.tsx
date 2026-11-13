@@ -1,28 +1,36 @@
 import { useState } from 'react'
 import { Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { LayoutDashboard, FileText, Users, Table, BarChart3, RefreshCw } from 'lucide-react'
+import { api } from '../api'
 
 const NAV = [
-  { path: '/', label: 'Submit', icon: FileText },
+  { path: '/submit', label: 'Submit', icon: FileText },
   { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { path: '/handlers', label: 'Handlers', icon: Users },
   { path: '/routing', label: 'Routing', icon: Table },
   { path: '/analytics', label: 'Analytics', icon: BarChart3 },
 ]
 
-const ICONS: Record<string, React.ElementType> = {
-  LayoutDashboard, FileText, Users, Table, BarChart3,
-}
-
 export default function Layout() {
   const [open, setOpen] = useState(false)
+  const [seeding, setSeeding] = useState(false)
   const location = useLocation()
   const navigate = useNavigate()
 
-  const isActive = (path: string) => location.pathname === path || (path !== '/' && location.pathname.startsWith(path))
+  const isActive = (path: string) => location.pathname === path || (path !== '/submit' && location.pathname.startsWith(path))
+
+  const handleSeed = async () => {
+    setSeeding(true)
+    try {
+      await api.demoSeed()
+      window.location.reload()
+    } finally {
+      setSeeding(false)
+    }
+  }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col min-h-screen">
       {/* Top nav */}
       <header className="border-b border-solid border-[var(--border)] bg-[var(--surface)] sticky top-0 z-20">
         <div className="flex items-center justify-between gap-12 px-6 py-4">
@@ -43,15 +51,19 @@ export default function Layout() {
                   {n.label}
                 </a>
               ))}
-              <a href="#" onClick={(e) => { e.preventDefault(); navigate('/') }} className="text-[var(--accent)] hover:underline">Demo seed</a>
+              <a href="#" onClick={(e) => { e.preventDefault(); handleSeed() }} className="text-[var(--accent)] hover:underline">
+                {seeding ? 'Seeding...' : 'Demo seed'}
+              </a>
             </nav>
           </div>
           <div className="flex items-center gap-6">
             <button
               className="btn btn-sm btn-ghost hidden md:flex"
-              onClick={() => navigate('/api/demo-seed')}
+              disabled={seeding}
+              onClick={handleSeed}
             >
-              <RefreshCw size={14} /> <span className="hidden sm:inline">Refresh data</span>
+              <RefreshCw size={14} className={seeding ? 'animate-spin' : ''} />
+              <span className="hidden sm:inline">{seeding ? 'Seeding...' : 'Demo Seed'}</span>
             </button>
             <button
               className="btn btn-sm btn-ghost md:hidden"
@@ -68,13 +80,13 @@ export default function Layout() {
         </div>
       </header>
 
-      <div className="flex-1 relative">
+      <div className="flex-1 flex flex-row relative min-h-0">
         {/* Desktop sidebar */}
         <aside className="hidden md:block">
-          <nav className="border-r border-solid border-[var(--border)] bg-[var(--surface)] w-64 flex-shrink-0">
+          <nav className="border-r border-solid border-[var(--border)] bg-[var(--surface)] w-64 h-full flex-shrink-0">
             <ul className="py-4 space-y-1">
               {NAV.map((n) => {
-                const Icon = ICONS[n.icon.name]
+                const Icon = n.icon
                 return (
                   <li key={n.path}>
                     <button
@@ -91,7 +103,7 @@ export default function Layout() {
           </nav>
         </aside>
 
-        <main className="flex-1 overflow-y-auto p-4 md:p-6">
+        <main className="flex-1 overflow-y-auto p-4 md:p-6 pb-20 md:pb-6">
           <Outlet context={{ navigate }} />
         </main>
       </div>
@@ -100,7 +112,7 @@ export default function Layout() {
       <nav className="md:hidden border-t border-solid border-[var(--border)] bg-[var(--surface)] fixed bottom-0 left-0 right-0 z-30">
         <div className="flex justify-around py-2">
           {NAV.map((n) => {
-            const Icon = ICONS[n.icon.name]
+            const Icon = n.icon
             return (
               <button
                 key={n.path}
@@ -131,7 +143,7 @@ export default function Layout() {
           </div>
           <ul className="py-3 space-y-1">
             {NAV.map((n) => {
-              const Icon = ICONS[n.icon.name]
+              const Icon = n.icon
               return (
                 <li key={n.path}>
                   <button
