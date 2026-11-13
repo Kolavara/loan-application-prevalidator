@@ -1,13 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useApi } from '../api'
-import { api } from '../api'
-import { escapeHtml, formatINR, statusColor, priorityColor } from '../utils'
+import { useEffect, useState } from 'react'
+import { useApi, api } from '../api'
+import { formatINR } from '../utils'
+import { 
+  Users, 
+  CheckCircle, 
+  XCircle, 
+  RotateCw, 
+  Building2, 
+  Sliders, 
+  CheckCircle2, 
+  Clock, 
+  AlertCircle 
+} from 'lucide-react'
 
 export default function Handler() {
   const { data: handlers, run: runHandlers, loading: hLoading } = useApi(api.listHandlers, true)
   const [handlerId, setHandlerId] = useState<string | number | null>(null)
   const [selHandler, setSelHandler] = useState<any>(null)
-  const { data: handlerReports, run: runHandlerReports } = useApi(api.getHandlerReports, false)
+  const { data: handlerReports, run: runHandlerReports, loading: rLoading } = useApi(api.getHandlerReports, false)
   const [capacity, setCapacity] = useState('')
   const [capError, setCapError] = useState('')
   const [updateStatus, setUpdateStatus] = useState<'idle' | 'ok' | 'error'>('idle')
@@ -52,7 +62,7 @@ export default function Handler() {
     if (res.ok) {
       setSelHandler(res.data)
       setUpdateStatus('ok')
-      setUpdateMsg('Capacity updated')
+      setUpdateMsg('Capacity updated successfully')
       runHandlers()
     } else {
       setUpdateStatus('error')
@@ -66,7 +76,7 @@ export default function Handler() {
       runHandlerReports(selHandler?.id ?? 0)
     } else {
       setUpdateStatus('error')
-      setUpdateMsg(res.error?.message || `Could not ${status}`)
+      setUpdateMsg(res.error?.message || `Could not set status to ${status}`)
     }
   }
 
@@ -75,157 +85,238 @@ export default function Handler() {
   const loadPct = selHandler ? Math.round((selHandler.load / Math.max(selHandler.capacity, 1)) * 100) : 0
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-8">
+    <div className="flex flex-col gap-6">
+      
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="mb-1">Handler desk</h2>
-          <p className="small">Assigned reports, status changes, availability and capacity.</p>
+          <h2 className="text-[22px] font-extrabold text-[#1e293b]">Handler Desks & Officers</h2>
+          <p className="text-[12px] text-[#94a3b8] font-medium">
+            Monitor capacity, adjust officer availability, and advance loan report lifecycle.
+          </p>
         </div>
-        <button className="btn btn-sm btn-ghost" onClick={() => runHandlers()}>Refresh</button>
+
+        <button 
+          onClick={() => runHandlers()}
+          className="self-start sm:self-auto px-4 py-2 rounded-[12px] bg-white border border-[#f3f4f6] text-[#0d6efd] font-bold text-[12px] shadow-2xs hover:bg-[#eff6ff] transition-all flex items-center gap-1.5 cursor-pointer"
+        >
+          <RotateCw size={13} className={hLoading ? 'animate-spin' : ''} />
+          Refresh Desks
+        </button>
       </div>
 
-      <div className="border border-solid border-[var(--border)] bg-[var(--surface)] p-4 grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
-        <div>
-          <label className="text-xs text-[var(--muted-fg)] uppercase tracking-wider font-semibold block mb-1">Handler</label>
-          <select
-            className="w-full"
-            value={handlerId ?? ''}
-            onChange={(e) => setHandlerId(e.target.value || null)}
-            disabled={hLoading}
-          >
-            <option value="">Select a handler</option>
-            {handlerList.map((h: any) => (
-              <option key={h.id} value={h.id}>
-                {escapeHtml(h.name)} ({escapeHtml(h.category)})
-              </option>
-            ))}
-          </select>
-          {hLoading && <p className="small text-[var(--muted-fg)] mt-1">Loading…</p>}
-        </div>
-        <div className="md:col-span-2">
-          <p className="text-xs text-[var(--muted-fg)] uppercase tracking-wider font-semibold block mb-1">Selected handler</p>
-          {selHandler ? (
-            <div className="space-y-1">
-              <div className="flex items-baseline gap-2">
-                <span className="mono text-lg font-bold">{escapeHtml(selHandler.name)}</span>
-                <span className={`tag ${statusColor(selHandler.available ? 'assigned' : 'pending')}`}>{selHandler.available ? 'Available' : 'Unavailable'}</span>
-              </div>
-              <p className="text-[12px] text-[var(--muted-fg)]">{escapeHtml(selHandler.category)} · {escapeHtml(selHandler.zone)} · {escapeHtml(selHandler.role)} · {escapeHtml(selHandler.authority)}</p>
-              <div className="mt-2 text-[12px]">
-                Load <span className="mono">{selHandler.load}</span> / Capacity <span className="mono">{selHandler.capacity}</span>
-                ({loadPct}%)
-              </div>
+      {/* Selected Handler & Controls */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+        
+        {/* Handler Selector & Profile Card: 7 cols */}
+        <div className="lg:col-span-7 bg-white p-6 rounded-[24px] border border-[#f3f4f6] shadow-xs flex flex-col justify-between gap-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                Select Underwriting Handler
+              </label>
+              <select
+                value={handlerId ?? ''}
+                onChange={(e) => setHandlerId(e.target.value || null)}
+                className="w-full sm:w-64 bg-[#f8f9fc] border border-[#e2e8f0] rounded-[12px] px-3.5 py-2 text-[13px] font-bold text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all cursor-pointer"
+              >
+                {handlerList.map((h: any) => (
+                  <option key={h.id} value={h.id}>
+                    {h.name} — {h.category} ({h.zone})
+                  </option>
+                ))}
+              </select>
             </div>
-          ) : (
-            <p className="text-[12px] text-[var(--muted-fg)]">Select a handler from the list.</p>
-          )}
-        </div>
-      </div>
 
-      {selHandler && (
-        <div className="border border-solid border-[var(--border)] bg-[var(--surface)] p-4 grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-          <div>
-            <button
-              className="btn btn-ghost w-full text-left"
-              onClick={handleAvailability}
-            >
-              {selHandler.available ? 'Mark unavailable' : 'Mark available'}
-            </button>
-          </div>
-          <div>
-            <form onSubmit={handleCapacity}>
-              <label className="text-xs text-[var(--muted-fg)] uppercase tracking-wider font-semibold block mb-1">Capacity (0–50)</label>
-              <input
-                className={`w-full ${capError ? 'invalid' : ''}`}
-                type="number"
-                value={capacity}
-                onChange={(e) => setCapacity(e.target.value)}
-                min="0"
-                max="50"
-              />
-              {capError && <span className="field-error">{escapeHtml(capError)}</span>}
-              <button type="submit" className="btn btn-sm btn-primary mt-2 w-full">Set capacity</button>
-            </form>
-          </div>
-          <div className="flex items-end gap-2">
-            {updateStatus !== 'idle' && (
-              <span className={`text-xs ${updateStatus === 'ok' ? 'text-[var(--ok)]' : 'text-[var(--status-rejected)]'}`} font-semibold>
-                {escapeHtml(updateMsg)}
+            {selHandler && (
+              <span className={`self-start sm:self-auto inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[12px] font-extrabold ${
+                selHandler.available ? 'bg-[#ecfdf5] text-[#10b981]' : 'bg-red-50 text-red-500'
+              }`}>
+                {selHandler.available ? <CheckCircle size={14} /> : <XCircle size={14} />}
+                {selHandler.available ? 'Active & Receiving' : 'Unavailable'}
               </span>
             )}
           </div>
-        </div>
-      )}
 
-      <div className="border border-solid border-[var(--border)] bg-[var(--surface)] p-4">
-        <div className="flex items-baseline justify-between gap-8 mb-4">
+          {selHandler && (
+            <div className="bg-[#f8f9fc] p-4.5 rounded-[18px] border border-[#f1f5f9] space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h3 className="text-[16px] font-extrabold text-[#1e293b]">{selHandler.name}</h3>
+                  <p className="text-[12px] text-[#64748b] font-medium mt-0.5">
+                    {selHandler.role} · {selHandler.category} Loans · Zone {selHandler.zone}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[11px] font-extrabold text-[#0d6efd] bg-white border border-[#dbeafe] px-2.5 py-1 rounded-[8px]">
+                    Authority Level {selHandler.authority}
+                  </span>
+                </div>
+              </div>
+
+              {/* Load vs Capacity Progress */}
+              <div>
+                <div className="flex justify-between items-center text-[12px] font-bold mb-1.5">
+                  <span className="text-[#64748b]">Assigned Workload</span>
+                  <span className={loadPct >= 100 ? 'text-[#f97316]' : 'text-[#1e293b]'}>
+                    {selHandler.load} / {selHandler.capacity} cases ({loadPct}%)
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-[#e2e8f0] rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      loadPct >= 100 ? 'bg-[#f97316]' : loadPct >= 60 ? 'bg-[#0d6efd]' : 'bg-[#10b981]'
+                    }`}
+                    style={{ width: `${Math.min(loadPct, 100)}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Adjust Capacity & Availability: 5 cols */}
+        <div className="lg:col-span-5 bg-white p-6 rounded-[24px] border border-[#f3f4f6] shadow-xs flex flex-col justify-between gap-4">
+          <h3 className="text-[15px] font-extrabold text-[#1e293b] flex items-center gap-2">
+            <Sliders size={16} className="text-[#0d6efd]" />
+            Desk Configuration
+          </h3>
+
+          {selHandler && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                  Availability Status
+                </label>
+                <button
+                  onClick={handleAvailability}
+                  className={`w-full py-2.5 px-4 rounded-[12px] font-bold text-[13px] border transition-all cursor-pointer ${
+                    selHandler.available
+                      ? 'bg-white border-red-200 text-red-600 hover:bg-red-50'
+                      : 'bg-white border-[#10b981] text-[#10b981] hover:bg-[#ecfdf5]'
+                  }`}
+                >
+                  {selHandler.available ? 'Set Unavailable (Pause Intake)' : 'Set Available (Accept Intake)'}
+                </button>
+              </div>
+
+              <form onSubmit={handleCapacity}>
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                  Adjust Capacity (0–50)
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="number"
+                    value={capacity}
+                    onChange={(e) => setCapacity(e.target.value)}
+                    min="0"
+                    max="50"
+                    className="flex-1 bg-[#f8f9fc] border border-[#e2e8f0] rounded-[12px] px-3.5 py-2 text-[13px] font-bold text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden"
+                  />
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-[12px] bg-[#0d6efd] text-white font-bold text-[12px] shadow-sm hover:bg-[#0b5ed7] transition-all cursor-pointer"
+                  >
+                    Save
+                  </button>
+                </div>
+                {capError && <p className="text-[11px] text-red-500 font-medium mt-1">{capError}</p>}
+              </form>
+
+              {updateStatus !== 'idle' && (
+                <p className={`text-[12px] font-bold ${updateStatus === 'ok' ? 'text-[#10b981]' : 'text-red-500'}`}>
+                  {updateMsg}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* Handler Reports Table */}
+      <div className="bg-white p-6 rounded-[24px] border border-[#f3f4f6] shadow-xs">
+        <div className="flex items-center justify-between mb-4">
           <div>
-            <h3 className="section-title mb-1">Assigned reports</h3>
-            <p className="text-xs text-[var(--muted-fg)]">{reports.length} report(s) assigned to {escapeHtml(selHandler?.name || '—')}</p>
+            <h3 className="text-[17px] font-extrabold text-[#1e293b]">
+              Reports Assigned to {selHandler?.name || 'Handler'}
+            </h3>
+            <p className="text-[12px] text-[#94a3b8] font-medium">
+              {reports.length} report(s) currently allocated to this desk
+            </p>
           </div>
         </div>
-        <div className="table-wrap">
-          <table>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[13px]">
             <thead>
-              <tr>
-                <th className="id-cell">Report ID</th>
-                <th className="id-cell">Application code</th>
-                <th>Reporter</th>
-                <th className="text-right">Amount</th>
-                <th className="text-center">Zone</th>
-                <th className="text-center">Category</th>
-                <th className="text-center">Priority</th>
-                <th className="text-center">Band</th>
-                <th className="text-center">Status</th>
-                <th className="text-center">Submitted</th>
-                <th style={{ width: 110 }}>Action</th>
+              <tr className="border-b border-[#f3f4f6] text-[#94a3b8] text-[11px] uppercase tracking-wider font-bold">
+                <th className="pb-3 font-bold">Report ID</th>
+                <th className="pb-3 font-bold">Code</th>
+                <th className="pb-3 font-bold">Applicant</th>
+                <th className="pb-3 font-bold">Amount</th>
+                <th className="pb-3 font-bold text-center">Urgency</th>
+                <th className="pb-3 font-bold text-center">Status</th>
+                <th className="pb-3 text-right font-bold">Workflow Actions</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className="divide-y divide-[#f8f9fc]">
               {reports.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="text-center py-12 text-[var(--muted-fg)]">
-                    No assigned reports for this handler.
+                  <td colSpan={7} className="py-12 text-center text-[#94a3b8] font-medium">
+                    No active reports assigned to this officer desk.
                   </td>
                 </tr>
               ) : (
                 reports.map((rep: any) => {
-                  const crit = (rep.priority_rank || 0) >= 4 || rep.urgency === 'critical'
-                  const canStart = rep.status === 'Pending'
-                  const canResolve = rep.status === 'Assigned' || rep.status === 'In Progress'
+                  const canStart = rep.status === 'Assigned' || rep.status === 'Pending'
+                  const canResolve = rep.status === 'In Progress' || rep.status === 'Assigned'
                   return (
-                    <tr
-                      key={rep.report_id}
-                      className={`hover:bg-[#f2ede2] transition-colors ${crit ? 'critical-row' : ''}`}
-                    >
-                      <td className="id-cell mono">{escapeHtml(rep.report_id)}</td>
-                      <td className="id-cell mono">{escapeHtml(rep.application_code)}</td>
-                      <td>{escapeHtml(rep.reporter_name)}</td>
-                      <td className="money">{formatINR(rep.amount)}</td>
-                      <td className="text-center">{escapeHtml(rep.zone || '—')}</td>
-                      <td className="text-center">{escapeHtml(rep.category || '—')}</td>
-                      <td className="text-center priority-bar {priorityColor(rep.urgency)}">{escapeHtml(String(rep.priority_rank || '—'))}</td>
-                      <td className="text-center">{escapeHtml(rep.band || '—')}</td>
-                      <td className="text-center"><span className={`tag ${statusColor(rep.status)}`}>{escapeHtml(rep.status)}</span></td>
-                      <td className="text-center small">{escapeHtml(String(rep.created_at || '').slice(0, 16))}</td>
-                      <td className="text-center">
-                        <div className="flex gap-2 justify-center">
+                    <tr key={rep.report_id} className="hover:bg-[#f8f9fc] transition-colors">
+                      <td className="py-3.5 font-mono font-bold text-[#0d6efd]">
+                        {rep.report_id}
+                      </td>
+                      <td className="py-3.5 font-mono font-bold text-[#1e293b]">
+                        {rep.application_code}
+                      </td>
+                      <td className="py-3.5 font-bold text-[#1e293b]">
+                        {rep.reporter_name}
+                      </td>
+                      <td className="py-3.5 font-mono font-semibold text-[#1e293b]">
+                        {formatINR(rep.amount)}
+                      </td>
+                      <td className="py-3.5 text-center">
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          rep.urgency === 'critical' ? 'bg-red-50 text-red-600' :
+                          rep.urgency === 'high' ? 'bg-[#fff7ed] text-[#f97316]' : 'bg-[#f1f5f9] text-[#64748b]'
+                        }`}>
+                          {rep.urgency || 'normal'}
+                        </span>
+                      </td>
+                      <td className="py-3.5 text-center">
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
+                          rep.status === 'Resolved' ? 'bg-[#ecfdf5] text-[#10b981]' :
+                          rep.status === 'In Progress' ? 'bg-[#fff7ed] text-[#f97316]' : 'bg-[#eff6ff] text-[#0d6efd]'
+                        }`}>
+                          {rep.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 text-right">
+                        <div className="flex items-center justify-end gap-2">
                           {canStart && (
                             <button
-                              className="btn btn-xs"
                               onClick={() => handleStatus('In Progress', rep)}
-                              disabled={updateStatus !== 'idle'}
+                              className="px-3 py-1 rounded-[8px] bg-[#eff6ff] text-[#0d6efd] font-bold text-[11px] hover:bg-[#0d6efd] hover:text-white transition-all cursor-pointer"
                             >
-                              Start
+                              Start Review
                             </button>
                           )}
                           {canResolve && (
                             <button
-                              className="btn btn-xs btn-ghost"
                               onClick={() => handleStatus('Resolved', rep)}
-                              disabled={updateStatus !== 'idle'}
+                              className="px-3 py-1 rounded-[8px] bg-[#ecfdf5] text-[#10b981] font-bold text-[11px] hover:bg-[#10b981] hover:text-white transition-all cursor-pointer"
                             >
-                              Resolve
+                              Resolve Case
                             </button>
                           )}
                         </div>
@@ -239,9 +330,6 @@ export default function Handler() {
         </div>
       </div>
 
-      {updateStatus !== 'idle' && updateMsg && (
-        <p className={`text-xs ${updateStatus === 'ok' ? 'text-[var(--ok)]' : 'text-[var(--status-rejected)]'}`}>{escapeHtml(updateMsg)}</p>
-      )}
     </div>
   )
 }

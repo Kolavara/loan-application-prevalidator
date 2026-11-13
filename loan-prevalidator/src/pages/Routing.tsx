@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useApi } from '../api'
-import { api } from '../api'
-import { escapeHtml, formatINR, statusColor, priorityColor } from '../utils'
-import { RefreshCw } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { useApi, api } from '../api'
+import { RotateCw, Play, Filter, AlertCircle, ShieldAlert, ArrowRight } from 'lucide-react'
 
 export default function Routing() {
-  const { data: routing, run: runRouting } = useApi(api.listRouting, true)
+  const { data: routing, run: runRouting, loading: rLoading } = useApi(api.listRouting, true)
   const { data: handlers, run: runHandlers } = useApi(api.listHandlers, true)
   const { data: queue, run: runQueue } = useApi(api.getQueue, true)
   const [zoneFilter, setZoneFilter] = useState('')
@@ -36,9 +34,10 @@ export default function Routing() {
     const res = await api.processQueue()
     if (res.ok) {
       setProcessStatus('ok')
-      setProcessMsg(`Processed ${res.data?.processed ?? 0} waiting report(s)`)
+      setProcessMsg(`Successfully processed ${res.data?.processed ?? 0} waiting report(s)`)
       runQueue()
       runRouting()
+      runHandlers()
     } else {
       setProcessStatus('error')
       setProcessMsg(res.error?.message || 'Processing failed')
@@ -46,240 +45,187 @@ export default function Routing() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between gap-8">
+    <div className="flex flex-col gap-6">
+      
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="mb-1">Routing desk</h2>
-          <p className="small">Routing table, handler load, queues and override decisions.</p>
+          <h2 className="text-[22px] font-extrabold text-[#1e293b]">Routing Matrix & Dispatch</h2>
+          <p className="text-[12px] text-[#94a3b8] font-medium">
+            Matrix mapping (Zone × Category × Band), queue processor, and escalation tracking.
+          </p>
         </div>
-        <div className="flex items-center gap-4">
+
+        <div className="flex items-center gap-3">
           <button
-            className="btn btn-sm btn-primary"
-            disabled={processStatus === 'idle' || waiting.length === 0 || processStatus === 'pending'}
             onClick={handleProcess}
+            disabled={waiting.length === 0 || processStatus === 'pending'}
+            className="px-4 py-2 rounded-[12px] bg-[#0d6efd] text-white font-bold text-[12px] shadow-sm hover:bg-[#0b5ed7] transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
           >
-            {processStatus === 'pending' ? 'Processing…' : 'Process waiting queue'}
+            <Play size={13} fill="currentColor" />
+            {processStatus === 'pending' ? 'Processing...' : `Process Waiting Queue (${waiting.length})`}
           </button>
-          <button className="btn btn-sm btn-ghost" onClick={() => { runRouting(); runHandlers(); runQueue() }}>Refresh</button>
+
+          <button
+            onClick={() => { runRouting(); runHandlers(); runQueue() }}
+            className="px-3.5 py-2 rounded-[12px] bg-white border border-[#f3f4f6] text-[#64748b] hover:text-[#0d6efd] font-bold text-[12px] shadow-2xs hover:bg-[#eff6ff] transition-all flex items-center gap-1.5 cursor-pointer"
+          >
+            <RotateCw size={13} className={rLoading ? 'animate-spin' : ''} />
+            Refresh
+          </button>
         </div>
       </div>
-      {processStatus !== 'idle' && processStatus !== 'pending' && (
-        <p className={`text-xs ${processStatus === 'ok' ? 'text-[var(--ok)]' : 'text-[var(--status-rejected)]'}`}>
-          {escapeHtml(processMsg)}
-        </p>
+
+      {processStatus !== 'idle' && (
+        <div className={`p-4 rounded-[16px] text-[13px] font-bold ${
+          processStatus === 'ok' ? 'bg-[#ecfdf5] border border-[#a7f3d0] text-[#065f46]' : 'bg-red-50 border border-red-200 text-red-700'
+        }`}>
+          {processMsg}
+        </div>
       )}
 
-      <section className="section">
-        <div className="section-head">
-          <h3 className="section-title">Routing table</h3>
-          <div className="flex items-center gap-3">
-            <label className="text-xs text-[var(--muted-fg)] uppercase tracking-wider font-semibold">Zone</label>
-            <select className="w-auto" value={zoneFilter} onChange={(e) => setZoneFilter(e.target.value)}>
-              <option value="">All zones</option>
-              {zones.map((z: string) => <option key={z} value={z}>{escapeHtml(z)}</option>)}
+      {/* Queues Section: 2 Columns */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        
+        {/* Waiting Queue */}
+        <div className="bg-white p-6 rounded-[24px] border border-[#f3f4f6] shadow-xs">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[15px] font-extrabold text-[#1e293b] flex items-center gap-2">
+              <span className="size-2 rounded-full bg-[#f97316]" />
+              Waiting Queue ({waiting.length})
+            </h3>
+            <span className="text-[11px] font-bold text-[#94a3b8]">Awaiting Officer Capacity</span>
+          </div>
+
+          <div className="overflow-x-auto max-h-[220px]">
+            <table className="w-full text-left text-[12px]">
+              <thead>
+                <tr className="border-b border-[#f3f4f6] text-[#94a3b8] uppercase font-bold text-[10px]">
+                  <th className="pb-2">Report ID</th>
+                  <th className="pb-2">Applicant</th>
+                  <th className="pb-2">Category</th>
+                  <th className="pb-2 text-right">Zone</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f8f9fc]">
+                {waiting.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="py-8 text-center text-[#94a3b8]">Waiting queue is empty.</td>
+                  </tr>
+                ) : (
+                  waiting.map((rep: any) => (
+                    <tr key={rep.report_id} className="hover:bg-[#f8f9fc]">
+                      <td className="py-2.5 font-mono font-bold text-[#0d6efd]">{rep.report_id}</td>
+                      <td className="py-2.5 font-bold text-[#1e293b]">{rep.reporter_name}</td>
+                      <td className="py-2.5 text-[#64748b]">{rep.category}</td>
+                      <td className="py-2.5 text-right font-medium">{rep.zone}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Correction Queue */}
+        <div className="bg-white p-6 rounded-[24px] border border-[#f3f4f6] shadow-xs">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-[15px] font-extrabold text-[#1e293b] flex items-center gap-2">
+              <span className="size-2 rounded-full bg-red-500" />
+              Correction Queue ({correction.length})
+            </h3>
+            <span className="text-[11px] font-bold text-[#94a3b8]">DFA Trap / Validation Failures</span>
+          </div>
+
+          <div className="overflow-x-auto max-h-[220px]">
+            <table className="w-full text-left text-[12px]">
+              <thead>
+                <tr className="border-b border-[#f3f4f6] text-[#94a3b8] uppercase font-bold text-[10px]">
+                  <th className="pb-2">Report ID</th>
+                  <th className="pb-2">Code</th>
+                  <th className="pb-2">Failure Reason</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[#f8f9fc]">
+                {correction.length === 0 ? (
+                  <tr>
+                    <td colSpan={3} className="py-8 text-center text-[#94a3b8]">No rejected items.</td>
+                  </tr>
+                ) : (
+                  correction.map((rep: any) => (
+                    <tr key={rep.report_id} className="hover:bg-[#f8f9fc]">
+                      <td className="py-2.5 font-mono font-bold text-red-500">{rep.report_id}</td>
+                      <td className="py-2.5 font-mono font-bold text-[#1e293b]">{rep.application_code}</td>
+                      <td className="py-2.5 text-red-600 font-medium">{rep.validation_msg || 'Rejected by rule'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      {/* Routing Table */}
+      <div className="bg-white p-6 rounded-[24px] border border-[#f3f4f6] shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+          <div>
+            <h3 className="text-[17px] font-extrabold text-[#1e293b]">Dispatch Routing Matrix</h3>
+            <p className="text-[12px] text-[#94a3b8] font-medium">
+              Deterministic routing rules (Zone × Category × Amount Band = 60 rules)
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Filter size={14} className="text-[#94a3b8]" />
+            <select
+              value={zoneFilter}
+              onChange={(e) => setZoneFilter(e.target.value)}
+              className="bg-[#f8f9fc] border border-[#e2e8f0] rounded-[10px] px-3 py-1.5 text-[12px] font-bold text-[#1e293b] focus:outline-hidden cursor-pointer"
+            >
+              <option value="">All Zones ({rows.length} rows)</option>
+              {zones.map((z: string) => (
+                <option key={z} value={z}>{z} Zone</option>
+              ))}
             </select>
           </div>
         </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Zone</th>
-                <th>Category</th>
-                <th>Band</th>
-                <th>Branch</th>
-                <th>Team</th>
-                <th>Depot</th>
-                <th className="text-center">Authority</th>
+
+        <div className="overflow-x-auto max-h-[380px]">
+          <table className="w-full text-left text-[13px]">
+            <thead className="sticky top-0 bg-white">
+              <tr className="border-b border-[#f3f4f6] text-[#94a3b8] text-[11px] uppercase tracking-wider font-bold">
+                <th className="pb-3 font-bold">Zone</th>
+                <th className="pb-3 font-bold">Category</th>
+                <th className="pb-3 font-bold">Amount Band</th>
+                <th className="pb-3 font-bold">Branch</th>
+                <th className="pb-3 font-bold">Assigned Team</th>
+                <th className="pb-3 font-bold">Depot</th>
+                <th className="pb-3 text-center font-bold">Authority</th>
               </tr>
             </thead>
-            <tbody>
-              {rows.length === 0 ? (
-                <tr><td colSpan={7} className="text-center py-10 text-[var(--muted-fg)]">No routing rows match the filter.</td></tr>
-              ) : (
-                rows.map((row: any) => (
-                  <tr key={`${row.zone}|${row.category}|${row.band}`}>
-                    <td>{escapeHtml(row.zone)}</td>
-                    <td>{escapeHtml(row.category)}</td>
-                    <td className="mono">{escapeHtml(row.band)}</td>
-                    <td>{escapeHtml(row.branch)}</td>
-                    <td>{escapeHtml(row.team)}</td>
-                    <td>{escapeHtml(row.depot)}</td>
-                    <td className="text-center">{escapeHtml(row.authority)}</td>
-                  </tr>
-                ))
-              )}
+            <tbody className="divide-y divide-[#f8f9fc]">
+              {rows.map((row: any, idx: number) => (
+                <tr key={`${row.zone}|${row.category}|${row.band}|${idx}`} className="hover:bg-[#f8f9fc] transition-colors">
+                  <td className="py-2.5 font-bold text-[#1e293b]">{row.zone}</td>
+                  <td className="py-2.5 font-medium text-[#0d6efd]">{row.category}</td>
+                  <td className="py-2.5 font-mono text-[12px] font-semibold text-[#64748b]">{row.band}</td>
+                  <td className="py-2.5 text-[#1e293b]">{row.branch}</td>
+                  <td className="py-2.5 text-[#64748b]">{row.team}</td>
+                  <td className="py-2.5 text-[#64748b]">{row.depot}</td>
+                  <td className="py-2.5 text-center">
+                    <span className="inline-flex px-2 py-0.5 rounded-[6px] text-[11px] font-bold bg-[#eff6ff] text-[#0d6efd]">
+                      Level {row.authority}
+                    </span>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
-      </section>
+      </div>
 
-      <section className="section">
-        <div className="section-head">
-          <h3 className="section-title">Handler load</h3>
-        </div>
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Handler</th>
-                <th className="text-center">Zone</th>
-                <th className="text-center">Category</th>
-                <th className="text-center">Role</th>
-                <th className="text-center">Load</th>
-                <th className="text-center">Capacity</th>
-                <th className="text-center">Available</th>
-                <th className="text-center">Flag</th>
-              </tr>
-            </thead>
-            <tbody>
-              {handlerList.length === 0 ? (
-                <tr><td colSpan={8} className="text-center py-10 text-[var(--muted-fg)]">No handlers.</td></tr>
-              ) : (
-                handlerList.map((h: any) => {
-                  const isCentral = h.zone === 'Central'
-                  const overloaded = h.load >= h.capacity
-                  const flag = isCentral ? 'Escalation (Central)' : overloaded ? 'At capacity' : '—'
-                  return (
-                    <tr key={h.id} className={isCentral ? 'critical-row' : ''}>
-                      <td>{escapeHtml(h.name)}</td>
-                      <td className="text-center">{escapeHtml(h.zone)}</td>
-                      <td className="text-center">{escapeHtml(h.category)}</td>
-                      <td className="text-center">{escapeHtml(h.role)}</td>
-                      <td className="text-center mono">{h.load}</td>
-                      <td className="text-center mono">{h.capacity}</td>
-                      <td className="text-center">{h.available ? 'Yes' : 'No'}</td>
-                      <td className="text-center small">{flag}</td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-          <div className="mt-3 text-[12px] text-[var(--muted-fg)]">
-            Central-zone handlers are marked as escalation points. Backups are non-Central handlers in the same category with available capacity.
-          </div>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section-head">
-          <h3 className="section-title">Queues</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h4 className="text-[13px] mb-2">Waiting queue ({waiting.length})</h4>
-            <div className="table-wrap" style={{ maxHeight: 260, overflowY: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th className="id-cell" style={{ width: 90 }}>Report ID</th>
-                    <th className="id-cell" style={{ width: 110 }}>Application code</th>
-                    <th>Reporter</th>
-                    <th className="text-center">Zone</th>
-                    <th className="text-center">Category</th>
-                    <th className="text-center">Priority</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {waiting.length === 0 ? (
-                    <tr><td colSpan={6} className="text-center py-8 text-[var(--muted-fg)]">Empty.</td></tr>
-                  ) : (
-                    waiting.map((rep: any) => (
-                      <tr key={rep.report_id}>
-                        <td className="id-cell mono small">{escapeHtml(rep.report_id)}</td>
-                        <td className="id-cell mono small">{escapeHtml(rep.application_code)}</td>
-                        <td className="small">{escapeHtml(rep.reporter_name)}</td>
-                        <td className="text-center small">{escapeHtml(rep.zone || '—')}</td>
-                        <td className="text-center small">{escapeHtml(rep.category || '—')}</td>
-                        <td className="text-center small priority-bar {priorityColor(rep.urgency)}">{escapeHtml(String(rep.priority_rank || '—'))}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div>
-            <h4 className="text-[13px] mb-2">Correction queue ({correction.length})</h4>
-            <div className="table-wrap" style={{ maxHeight: 260, overflowY: 'auto' }}>
-              <table>
-                <thead>
-                  <tr>
-                    <th className="id-cell" style={{ width: 90 }}>Report ID</th>
-                    <th className="id-cell" style={{ width: 110 }}>Application code</th>
-                    <th>Reporter</th>
-                    <th className="text-center">Zone</th>
-                    <th className="text-center">Reason</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {correction.length === 0 ? (
-                    <tr><td colSpan={5} className="text-center py-8 text-[var(--muted-fg)]">Empty.</td></tr>
-                  ) : (
-                    correction.map((rep: any) => (
-                      <tr key={rep.report_id}>
-                        <td className="id-cell mono small">{escapeHtml(rep.report_id)}</td>
-                        <td className="id-cell mono small">{escapeHtml(rep.application_code)}</td>
-                        <td className="small">{escapeHtml(rep.reporter_name)}</td>
-                        <td className="text-center small">{escapeHtml(rep.zone || '—')}</td>
-                        <td className="text-center small">{escapeHtml(rep.validation_msg || 'Rejected')}</td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="section-head">
-          <h3 className="section-title">Escalation &amp; override decisions</h3>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h4 className="text-[13px] mb-2">Escalations ({escalations.length})</h4>
-            <div className="space-y-2">
-              {escalations.length === 0 ? (
-                <p className="text-[12px] text-[var(--muted-fg)]">None.</p>
-              ) : (
-                escalations.map((rep: any) => (
-                  <div key={rep.report_id} className="border border-solid border-[var(--border)] bg-[var(--surface)] p-3">
-                    <div className="flex items-baseline justify-between gap-4 mb-1">
-                      <span className="mono text-xs">{escapeHtml(rep.report_id)}</span>
-                      <span className={`tag ${statusColor(rep.status)}`} style={{ fontSize: '10px' }}>{escapeHtml(rep.status)}</span>
-                    </div>
-                    <div className="text-[12px] text-[var(--muted-fg)]">{escapeHtml(rep.reporter_name || '')} · {escapeHtml(rep.application_code || '')}</div>
-                    <div className="text-[12px] mt-1">{escapeHtml(rep.routing_reason || 'Escalated — handler at capacity')}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-          <div>
-            <h4 className="text-[13px] mb-2">Priority overrides ({overrides.length})</h4>
-            <div className="space-y-2">
-              {overrides.length === 0 ? (
-                <p className="text-[12px] text-[var(--muted-fg)]">None.</p>
-              ) : (
-                overrides.map((rep: any) => (
-                  <div key={rep.report_id} className="border border-solid border-[var(--border)] bg-[var(--surface)] p-3">
-                    <div className="flex items-baseline justify-between gap-4 mb-1">
-                      <span className="mono text-xs">{escapeHtml(rep.report_id)}</span>
-                      <span className={`tag critical`} style={{ fontSize: '10px' }}>Critical</span>
-                    </div>
-                    <div className="text-[12px] text-[var(--muted-fg)]">{escapeHtml(rep.reporter_name || '')} · {escapeHtml(rep.application_code || '')}</div>
-                    <div className="text-[12px] mt-1">Priority {escapeHtml(String(rep.priority_rank || '—'))}</div>
-                    <div className="text-[12px] mt-1">{escapeHtml(rep.routing_reason || 'Priority override applied')}</div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </div>
-      </section>
     </div>
   )
 }

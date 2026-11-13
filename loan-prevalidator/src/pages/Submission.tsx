@@ -1,16 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useApi } from '../api'
-import { api, type Urgency } from '../api'
+import { useApi, api, type Urgency } from '../api'
 import {
-  escapeHtml,
   formatINR,
   validateCode,
   URGENCIES,
   ZONES,
-  statusColor,
-  priorityColor,
 } from '../utils'
+import { ArrowLeft, CheckCircle2, AlertTriangle, ShieldCheck, Sparkles, Send } from 'lucide-react'
 
 type FormFields = {
   reporter_name: string
@@ -29,20 +26,9 @@ const EMPTY: FormFields = {
   application_code: '',
   income: '',
   amount: '',
-  zone: '',
+  zone: 'North',
   urgency: 'normal',
   description: '',
-}
-
-const FIELD_LABELS: Record<string, string> = {
-  reporter_name: 'Reporter name',
-  contact: 'Contact (phone/email)',
-  application_code: 'Application code',
-  income: 'Annual income (INR)',
-  amount: 'Loan amount (INR)',
-  zone: 'Zone',
-  urgency: 'Urgency',
-  description: 'Description',
 }
 
 export default function Submission() {
@@ -56,21 +42,7 @@ export default function Submission() {
   const [existingId, setExistingId] = useState<string>('')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const { data, run: runValidate } = useApi(api.validate, false)
-
-  useEffect(() => {
-    if (!validating) return
-    runValidate({ ...fields, urgency: fields.urgency as Urgency }).then((res) => {
-      if (res.ok) {
-        setPreview(res.data)
-        setErrors({})
-      } else {
-        setErrors(res.error?.errors || {})
-        setPreview(res.data)
-      }
-      setValidating(false)
-    })
-  }, [data, validating, runValidate, fields])
+  const { run: runValidate } = useApi(api.validate, false)
 
   const debouncedValidate = useCallback((f: FormFields) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
@@ -89,17 +61,26 @@ export default function Submission() {
     }, 250)
   }, [runValidate])
 
-  const handleChange = (k: keyof FormFields) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFields((p) => ({ ...p, [k]: e.target.value }))
+  const handleChange = (k: keyof FormFields) => (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>
+  ) => {
+    const val = e.target.value
+    const next = { ...fields, [k]: val }
+    setFields(next)
+
     if (k === 'application_code') {
-      const codeRes = validateCode(e.target.value)
-      if (!codeRes.ok) {
+      const codeRes = validateCode(val)
+      if (!codeRes.ok && val.length > 0) {
         setErrors((p) => ({ ...p, [k]: codeRes.error ?? '' }))
       } else {
-        setErrors((p) => { const n = { ...p }; delete n[k]; return n })
+        setErrors((p) => {
+          const n = { ...p }
+          delete n[k]
+          return n
+        })
       }
     }
-    debouncedValidate({ ...fields, [k]: e.target.value } as FormFields)
+    debouncedValidate(next)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -111,14 +92,14 @@ export default function Submission() {
       const res = await api.submitReport({ ...fields, urgency: fields.urgency as Urgency })
       if (res.ok) {
         setSubmitStatus('ok')
-        setSubmitMsg(`Report ${escapeHtml(String(res.data?.report_id || ''))} created — ${escapeHtml(String(res.data?.status || ''))}`)
+        setSubmitMsg(`Report ${res.data?.report_id || ''} created — Status: ${res.data?.status || ''} (Handler: ${res.data?.handler_name || res.data?.queue || 'Dispatched'})`)
       } else {
         setSubmitStatus('error')
         if (res.error?.status === 409) {
           setExistingId(res.error.existing_report_id || '')
-          setSubmitMsg(`Duplicate report already exists: ${escapeHtml(String(res.error.existing_report_id || ''))}. ${escapeHtml(res.error.message || '')}`)
+          setSubmitMsg(`Duplicate application code already registered: ${res.error.existing_report_id || ''}. ${res.error.message || ''}`)
         } else if (res.error?.status === 422) {
-          setSubmitMsg(`Rejected (correction queue): ${escapeHtml(res.error.message || '')}`)
+          setSubmitMsg(`Application moved to correction queue: ${res.error.message || ''}`)
           setErrors(res.error?.errors || {})
         } else {
           setSubmitMsg(res.error?.message || 'Submission failed')
@@ -130,20 +111,6 @@ export default function Submission() {
     }
   }
 
-  const loadForCorrection = (report: any) => {
-    setFields({
-      reporter_name: report.reporter_name || '',
-      contact: report.contact || '',
-      application_code: report.application_code || '',
-      income: String(report.income ?? ''),
-      amount: String(report.amount ?? ''),
-      zone: report.zone || '',
-      urgency: report.urgency || 'normal',
-      description: report.description || '',
-    })
-    navigate('/')
-  }
-
   const isInvalidCode = fields.application_code && !validateCode(fields.application_code).ok
   const hasErrors = Object.keys(errors).length > 0 || isInvalidCode
   const requiredFilled =
@@ -153,247 +120,335 @@ export default function Submission() {
     fields.amount.trim() &&
     fields.description.trim()
 
-  const category = preview?.category
-  const band = preview?.band
-  const zoneUsed = preview?.zone_used
-  const zoneFallback = preview?.zone_fallback
-  const classNote = preview?.class_note
-
   return (
-    <div className="max-w-4xl mx-auto space-y-16">
-      <div className="flex items-center gap-4 text-xs uppercase tracking-wider text-[var(--muted-fg)] font-semibold mb-2">
-        <button
-          onClick={() => navigate(-1)}
-          className="text-[var(--accent)] hover:underline flex items-center gap-2"
-        >
-          <span>←</span> Back
-        </button>
-        <span aria-hidden="true">/</span>
-        <span>Report submission</span>
+    <div className="flex flex-col gap-6">
+      
+      {/* Page Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <button
+            onClick={() => navigate('/dashboard')}
+            className="flex items-center gap-1.5 text-[12px] font-bold text-[#0d6efd] hover:underline mb-1 cursor-pointer"
+          >
+            <ArrowLeft size={14} /> Back to Dashboard
+          </button>
+          <h2 className="text-[22px] font-extrabold text-[#1e293b]">Submit Application</h2>
+          <p className="text-[12px] text-[#94a3b8] font-medium">
+            Live DFA automata validation & routing policy pre-check as you type.
+          </p>
+        </div>
+
+        <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#eff6ff] text-[#0d6efd] text-[11px] font-bold">
+          <Sparkles size={13} />
+          <span>Table-Driven DFA q0–q11</span>
+        </div>
       </div>
 
-      <h2 className="mb-1">New report</h2>
-      <p className="small mb-6">Enter the loan application details. Validation runs as you type and the preview slip updates live.</p>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        
+        {/* Left Form: 7 cols */}
+        <div className="lg:col-span-7 bg-white p-6 sm:p-7 rounded-[24px] border border-[#f3f4f6] shadow-xs">
+          <form noValidate onSubmit={handleSubmit} className="space-y-4">
+            
+            {/* Applicant Name & Contact */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                  Applicant Name
+                </label>
+                <input
+                  type="text"
+                  value={fields.reporter_name}
+                  onChange={handleChange('reporter_name')}
+                  placeholder="e.g. Ramesh Kumar"
+                  className={`w-full bg-[#f8f9fc] border ${errors.reporter_name ? 'border-red-400 ring-2 ring-red-100' : 'border-[#e2e8f0]'} rounded-[12px] px-3.5 py-2.5 text-[13px] font-medium text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all`}
+                  required
+                />
+                {errors.reporter_name && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1">{errors.reporter_name}</p>
+                )}
+              </div>
 
-      <form noValidate onSubmit={handleSubmit} className="form-grid">
-        <div className="col-span-2">
-          <label htmlFor="reporter_name">{FIELD_LABELS.reporter_name}</label>
-          <input
-            id="reporter_name"
-            name="reporter_name"
-            className={`w-full ${errors.reporter_name ? 'invalid' : ''}`}
-            value={fields.reporter_name}
-            onChange={handleChange('reporter_name')}
-            placeholder="Full name"
-            required
-          />
-          {errors.reporter_name && <span className="field-error">{escapeHtml(errors.reporter_name)}</span>}
+              <div>
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                  Contact (Phone or Email)
+                </label>
+                <input
+                  type="text"
+                  value={fields.contact}
+                  onChange={handleChange('contact')}
+                  placeholder="e.g. 9876543210 or user@mail.com"
+                  className={`w-full bg-[#f8f9fc] border ${errors.contact ? 'border-red-400 ring-2 ring-red-100' : 'border-[#e2e8f0]'} rounded-[12px] px-3.5 py-2.5 text-[13px] font-medium text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all`}
+                  required
+                />
+                {errors.contact && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1">{errors.contact}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Application Code (DFA Verified) */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider">
+                  Application Code (DFA Validated)
+                </label>
+                <span className="text-[10px] text-[#94a3b8] font-mono">Format: LOAN + [HVPE] + 6 Digits</span>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  value={fields.application_code}
+                  onChange={handleChange('application_code')}
+                  placeholder="e.g. LOANH123456"
+                  className={`w-full bg-[#f8f9fc] font-mono uppercase tracking-wider border ${
+                    isInvalidCode || errors.application_code ? 'border-red-400 ring-2 ring-red-100' : 'border-[#e2e8f0]'
+                  } rounded-[12px] px-3.5 py-2.5 text-[13px] font-bold text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all`}
+                  required
+                />
+                {fields.application_code && (
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                    {!isInvalidCode ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-[#10b981] bg-[#ecfdf5] px-2 py-0.5 rounded-full">
+                        <CheckCircle2 size={12} /> Accepted (q11)
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] font-bold text-red-500 bg-red-50 px-2 py-0.5 rounded-full">
+                        <AlertTriangle size={12} /> Invalid Trap
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+              {errors.application_code && (
+                <p className="text-[11px] text-red-500 font-medium mt-1">{errors.application_code}</p>
+              )}
+            </div>
+
+            {/* Income & Amount */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                  Annual Income (INR)
+                </label>
+                <input
+                  type="number"
+                  value={fields.income}
+                  onChange={handleChange('income')}
+                  placeholder="e.g. 1200000"
+                  className={`w-full bg-[#f8f9fc] border ${errors.income ? 'border-red-400 ring-2 ring-red-100' : 'border-[#e2e8f0]'} rounded-[12px] px-3.5 py-2.5 text-[13px] font-semibold text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all`}
+                  required
+                />
+                {errors.income && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1">{errors.income}</p>
+                )}
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                  Requested Amount (INR)
+                </label>
+                <input
+                  type="number"
+                  value={fields.amount}
+                  onChange={handleChange('amount')}
+                  placeholder="e.g. 4500000"
+                  className={`w-full bg-[#f8f9fc] border ${errors.amount ? 'border-red-400 ring-2 ring-red-100' : 'border-[#e2e8f0]'} rounded-[12px] px-3.5 py-2.5 text-[13px] font-semibold text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all`}
+                  required
+                />
+                {errors.amount && (
+                  <p className="text-[11px] text-red-500 font-medium mt-1">{errors.amount}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Zone & Urgency */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                  Zone
+                </label>
+                <select
+                  value={fields.zone}
+                  onChange={handleChange('zone')}
+                  className="w-full bg-[#f8f9fc] border border-[#e2e8f0] rounded-[12px] px-3.5 py-2.5 text-[13px] font-medium text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all cursor-pointer"
+                >
+                  {ZONES.map((z) => (
+                    <option key={z} value={z}>{z}</option>
+                  ))}
+                  <option value="Metropolitan">Metropolitan (Trigger fallback)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                  Urgency Level
+                </label>
+                <select
+                  value={fields.urgency}
+                  onChange={handleChange('urgency')}
+                  className="w-full bg-[#f8f9fc] border border-[#e2e8f0] rounded-[12px] px-3.5 py-2.5 text-[13px] font-medium text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all cursor-pointer"
+                >
+                  {URGENCIES.map((u) => (
+                    <option key={u.value} value={u.value}>{u.label}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Description */}
+            <div>
+              <label className="text-[11px] font-bold text-[#64748b] uppercase tracking-wider block mb-1.5">
+                Loan Description & Purpose
+              </label>
+              <textarea
+                value={fields.description}
+                onChange={handleChange('description')}
+                placeholder="Describe the loan purpose (e.g. Purchase of a residential 3BHK flat in north sector)..."
+                rows={3}
+                className={`w-full bg-[#f8f9fc] border ${errors.description ? 'border-red-400 ring-2 ring-red-100' : 'border-[#e2e8f0]'} rounded-[12px] px-3.5 py-2.5 text-[13px] font-medium text-[#1e293b] focus:bg-white focus:border-[#0d6efd] focus:outline-hidden transition-all`}
+                required
+              />
+              {errors.description && (
+                <p className="text-[11px] text-red-500 font-medium mt-1">{errors.description}</p>
+              )}
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 pt-2">
+              <button
+                type="submit"
+                disabled={submitStatus === 'pending' || hasErrors || !requiredFilled}
+                className="w-full sm:flex-1 py-3 px-6 rounded-[12px] bg-[#0d6efd] text-white font-bold text-[13px] shadow-lg shadow-[#0d6efd]/20 hover:bg-[#0b5ed7] transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                <Send size={15} />
+                {submitStatus === 'pending' ? 'Dispatching...' : 'Validate & Dispatch Application'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setFields(EMPTY)}
+                className="w-full sm:w-auto py-3 px-6 rounded-[12px] bg-[#f8f9fc] border border-[#e2e8f0] text-[#64748b] hover:text-[#1e293b] font-bold text-[13px] hover:bg-white transition-all cursor-pointer"
+              >
+                Clear
+              </button>
+            </div>
+          </form>
         </div>
 
-        <div className="col-span-2">
-          <label htmlFor="contact">{FIELD_LABELS.contact}</label>
-          <input
-            id="contact"
-            name="contact"
-            className={`w-full ${errors.contact ? 'invalid' : ''}`}
-            value={fields.contact}
-            onChange={handleChange('contact')}
-            placeholder="Phone or email"
-            required
-          />
-          {errors.contact && <span className="field-error">{escapeHtml(errors.contact)}</span>}
-        </div>
+        {/* Right Preview Slip: 5 cols */}
+        <div className="lg:col-span-5 flex flex-col gap-4">
+          
+          {/* Submission Result Alerts */}
+          {submitStatus === 'ok' && (
+            <div className="p-4 rounded-[20px] bg-[#ecfdf5] border border-[#a7f3d0] text-[#065f46]">
+              <div className="flex items-center gap-2 font-extrabold text-[14px] mb-1">
+                <CheckCircle2 size={16} className="text-[#10b981]" /> Application Dispatched
+              </div>
+              <p className="text-[12px] leading-relaxed">{submitMsg}</p>
+            </div>
+          )}
 
-        <div>
-          <label htmlFor="application_code">{FIELD_LABELS.application_code}</label>
-          <div className="flex items-end gap-2">
-            <input
-              id="application_code"
-              name="application_code"
-              className={`flex-1 monospace ${isInvalidCode || errors.application_code ? 'invalid' : ''} uppercase`}
-              value={fields.application_code}
-              onChange={handleChange('application_code')}
-              placeholder="LOANH123456"
-              required
-              spellCheck={false}
-            />
-            <span className="validity-mark">{isInvalidCode ? 'invalid' : fields.application_code ? 'ok' : '—'}</span>
+          {submitStatus === 'error' && (
+            <div className="p-4 rounded-[20px] bg-red-50 border border-red-200 text-red-800">
+              <div className="flex items-center gap-2 font-extrabold text-[14px] mb-1">
+                <AlertTriangle size={16} className="text-red-600" /> Dispatch Blocked
+              </div>
+              <p className="text-[12px] leading-relaxed">{submitMsg}</p>
+              {existingId && (
+                <p className="text-[11px] mt-2 font-semibold text-red-700">
+                  Tip: Existing case ID {existingId} has been flagged for audit.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* Live Validation Slip */}
+          <div className="bg-white p-6 rounded-[24px] border border-[#f3f4f6] shadow-xs">
+            <div className="flex items-center justify-between pb-3 border-b border-[#f3f4f6] mb-4">
+              <div className="flex items-center gap-2">
+                <ShieldCheck size={18} className="text-[#0d6efd]" />
+                <h3 className="text-[15px] font-extrabold text-[#1e293b]">Live Validation Slip</h3>
+              </div>
+              <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full ${
+                validating ? 'bg-[#fff7ed] text-[#f97316]' : 'bg-[#eff6ff] text-[#0d6efd]'
+              }`}>
+                {validating ? 'Calculating...' : 'Real-Time'}
+              </span>
+            </div>
+
+            <div className="space-y-3 text-[13px]">
+              <div className="flex justify-between items-center">
+                <span className="text-[#64748b] font-medium">DFA Code Acceptance</span>
+                <span className={`font-mono font-bold ${
+                  preview?.valid ? 'text-[#10b981]' : fields.application_code ? 'text-red-500' : 'text-[#94a3b8]'
+                }`}>
+                  {preview?.valid ? 'ACCEPTED (q11)' : fields.application_code ? 'DEAD TRAP' : 'Awaiting Input'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-[#64748b] font-medium">Inferred Category</span>
+                <span className="font-extrabold text-[#1e293b] bg-[#f8f9fc] px-2.5 py-0.5 rounded-[8px]">
+                  {preview?.category || '—'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-[#64748b] font-medium">Amount Band</span>
+                <span className="font-semibold text-[#0d6efd]">
+                  {preview?.band || '—'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-[#64748b] font-medium">Zone Dispatched</span>
+                <span className="font-semibold text-[#1e293b]">
+                  {preview?.zone_used || fields.zone || '—'}
+                  {preview?.zone_fallback && (
+                    <span className="ml-1 text-[11px] text-[#f97316] font-bold">
+                      (Fallback: {preview.zone_fallback})
+                    </span>
+                  )}
+                </span>
+              </div>
+
+              <div className="border-t border-[#f3f4f6] pt-3 flex justify-between items-center">
+                <span className="text-[#64748b] font-medium">Annual Income</span>
+                <span className="font-mono font-bold text-[#1e293b]">
+                  {formatINR(fields.income)}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <span className="text-[#64748b] font-medium">Loan Requested</span>
+                <span className="font-mono font-extrabold text-[#0d6efd]">
+                  {formatINR(fields.amount)}
+                </span>
+              </div>
+
+              {preview?.class_note && (
+                <div className="p-3 bg-[#fff7ed] rounded-[12px] border border-[#fed7aa] text-[11px] text-[#c2410c] font-medium leading-relaxed">
+                  <strong>Conflict Note:</strong> {preview.class_note}
+                </div>
+              )}
+
+              {Object.keys(errors).length > 0 && (
+                <div className="p-3 bg-red-50 rounded-[12px] border border-red-200 text-[11px] text-red-700 font-medium">
+                  <strong>Validation Errors:</strong>
+                  <ul className="list-disc list-inside mt-1 space-y-0.5">
+                    {Object.entries(errors).map(([k, err]) => (
+                      <li key={k}>{err}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
           </div>
-          {errors.application_code && <span className="field-error">{escapeHtml(errors.application_code)}</span>}
-          {isInvalidCode && !errors.application_code && <span className="field-error">Use LOAN + H/V/P/E + 6 digits</span>}
+
         </div>
 
-        <div>
-          <label htmlFor="income">{FIELD_LABELS.income}</label>
-          <input
-            id="income"
-            name="income"
-            type="number"
-            className={`w-full text-right ${errors.income ? 'invalid' : ''} income`}
-            value={fields.income}
-            onChange={handleChange('income')}
-            placeholder="e.g. 1250000"
-            required
-          />
-          {errors.income && <span className="field-error">{escapeHtml(errors.income)}</span>}
-        </div>
+      </div>
 
-        <div>
-          <label htmlFor="amount">{FIELD_LABELS.amount}</label>
-          <input
-            id="amount"
-            name="amount"
-            type="number"
-            className={`w-full text-right ${errors.amount ? 'invalid' : ''} amount`}
-            value={fields.amount}
-            onChange={handleChange('amount')}
-            placeholder="e.g. 500000"
-            required
-          />
-          {errors.amount && <span className="field-error">{escapeHtml(errors.amount)}</span>}
-        </div>
-
-        <div className="col-span-2">
-          <label htmlFor="zone">{FIELD_LABELS.zone}</label>
-          <div className="flex gap-2">
-            <input
-              id="zone"
-              name="zone"
-              className="flex-1"
-              value={fields.zone}
-              onChange={handleChange('zone')}
-              placeholder="e.g. North"
-              list="zone-list"
-            />
-            <datalist id="zone-list">
-              {ZONES.map((z) => <option key={z} value={z} />)}
-            </datalist>
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost"
-              onClick={() => {
-                const z = fields.zone.trim()
-                if (!ZONES.includes(z) && z) {
-                  setFields((p) => ({ ...p, zone: z }))
-                }
-              }}
-            >
-              Add
-            </button>
-          </div>
-          {errors.zone && <span className="field-error">{escapeHtml(errors.zone)}</span>}
-          <p className="small mt-1">Suggestions: {ZONES.join(', ')}. Unknown zones are allowed.</p>
-        </div>
-
-        <div>
-          <label htmlFor="urgency">{FIELD_LABELS.urgency}</label>
-          <select
-            id="urgency"
-            name="urgency"
-            className="w-full"
-            value={fields.urgency}
-            onChange={handleChange('urgency')}
-          >
-            {URGENCIES.map((u) => (
-              <option key={u.value} value={u.value}>
-                {u.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div className="col-span-2">
-          <label htmlFor="description">{FIELD_LABELS.description}</label>
-          <textarea
-            id="description"
-            name="description"
-            value={fields.description}
-            onChange={handleChange('description')}
-            placeholder="Purpose of loan and any relevant notes"
-            required
-          />
-          {errors.description && <span className="field-error">{escapeHtml(errors.description)}</span>}
-        </div>
-
-        <div className="col-span-2 flex gap-4 mt-4">
-          <button
-            type="submit"
-            className="btn btn-primary flex-1"
-            disabled={submitStatus === 'pending' || hasErrors || !requiredFilled}
-          >
-            {submitStatus === 'pending' ? 'Submitting…' : 'Submit report'}
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost flex-1"
-            onClick={() => setFields(EMPTY)}
-            disabled={submitStatus === 'pending'}
-          >
-            Clear
-          </button>
-        </div>
-      </form>
-
-      {submitStatus === 'ok' && (
-        <section className="section">
-          <div className="section-head">
-            <h3 className="section-title">Submitted</h3>
-          </div>
-          <div className="slip">
-            <div className="slip-head">Report lodged</div>
-            <div className="slip-row"><span className="slip-label">Result</span><span>{escapeHtml(submitMsg)}</span></div>
-            <p className="slip-note">The report has been dispatched. Use the Dashboard to track its status.</p>
-          </div>
-        </section>
-      )}
-
-      {submitStatus === 'error' && (
-        <section className="section">
-          <div className="section-head">
-            <h3 className="section-title" style={{ color: 'var(--status-rejected)' }}>Result</h3>
-          </div>
-          <div className="slip" style={{ borderColor: 'var(--status-rejected)' }}>
-            <div className="slip-head" style={{ color: 'var(--status-rejected)' }}>{existingId ? `Duplicate — ${existingId}` : 'Rejected'}</div>
-            <div className="slip-row"><span className="slip-label">Message</span><span>{escapeHtml(submitMsg)}</span></div>
-            {existingId && (
-              <p className="slip-note">A report with this application code already exists. Open it from the Dashboard to correct and resubmit.</p>
-            )}
-          </div>
-        </section>
-      )}
-
-      {preview || validating ? (
-        <section className="section">
-          <div className="section-head">
-            <h3 className="section-title">Live validation preview</h3>
-            <span className="small">{validating ? 'Validating…' : 'Ready'}</span>
-          </div>
-          <div className="slip">
-            <div className="slip-head">Validation slip</div>
-            <div className="slip-row"><span className="slip-label">Valid</span><span>{preview ? String(preview.valid) : '—'}</span></div>
-            {preview?.category && <div className="slip-row"><span className="slip-label">Category</span><span>{escapeHtml(preview.category)}</span></div>}
-            {preview?.band && <div className="slip-row"><span className="slip-label">Amount band</span><span>{escapeHtml(preview.band)}</span></div>}
-            {preview?.zone_used && (
-              <div className="slip-row"><span className="slip-label">Zone used</span><span>{escapeHtml(preview.zone_used)}</span></div>
-            )}
-            {preview?.zone_fallback && (
-              <div className="slip-row"><span className="slip-label">Zone fallback</span><span className="mono">{escapeHtml(preview.zone_fallback)}</span></div>
-            )}
-            {preview?.class_note && (
-              <div className="slip-row"><span className="slip-label">Classification note</span><span>{escapeHtml(preview.class_note)}</span></div>
-            )}
-            <div className="slip-divider"></div>
-            <div className="slip-row"><span className="slip-label">Income</span><span className="money text-right">{formatINR(fields.income)}</span></div>
-            <div className="slip-row"><span className="slip-label">Amount</span><span className="money text-right">{formatINR(fields.amount)}</span></div>
-            {Object.keys(errors || {}).length > 0 && (
-              <div className="slip-row"><span className="slip-label">Errors</span><span style={{ color: 'var(--status-rejected)' }}>{Object.values(errors).join('; ')}</span></div>
-            )}
-            {preview?.zone_fallback && (
-              <p className="slip-note">Zone "{escapeHtml(fields.zone)}" was not recognised — fallback zone {escapeHtml(String(preview.zone_fallback))} used.</p>
-            )}
-          </div>
-        </section>
-      ) : null}
     </div>
   )
 }
