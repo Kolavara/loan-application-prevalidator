@@ -1,49 +1,66 @@
 :root {
-  /* Paper / ink */
-  --bg: #f6f3ec;
-  --surface: #ffffff;
-  --ink: #1d1b16;
-  --muted: #5c574e;
-  --muted-fg: #7a7468;
-  --border: #c8c2b2;
-  --ring: #1f4d3a;
+  /* Pencil Sketch & Blueprint tokens */
+  --paper: #fafaf8;
+  --card: #ffffff;
+  --ink: #0a0c10;
+  --mid: #565b64;
+  --muted: #8b909a;
+  --line: #e7e9ef;
+  --plot: #2e6fff;
+  --positive: #16834a;
+  --positive-soft: #e6f5ec;
+  --well: #f3f4f6;
+  --previous: #cbd5e1;
+  --blue-1: #dbe5ff;
+  --blue-2: #b2c7ff;
+  --blue-3: #7c9fff;
+  --blue-4: #3d6ef5;
+  --blue-5: #1d47c8;
 
-  /* Accent */
-  --accent: #1f4d3a;
+  /* Aliases for compatibility */
+  --bg: var(--paper);
+  --surface: var(--card);
+  --muted-fg: var(--muted);
+  --border: var(--line);
+  --ring: var(--plot);
+  --accent: var(--plot);
   --accent-fg: #ffffff;
 
-  /* Status - muted and semantic */
-  --status-pending: #8a8579;
+  /* Status - refined blueprint semantic */
+  --status-pending: #8b909a;
   --status-pending-fg: #ffffff;
-  --status-assigned: #1f4d3a;
+  --status-assigned: #2e6fff;
   --status-assigned-fg: #ffffff;
-  --status-inprogress: #a8721e;
+  --status-inprogress: #e27d14;
   --status-inprogress-fg: #ffffff;
-  --status-resolved: #2f6f4f;
+  --status-resolved: #16834a;
   --status-resolved-fg: #ffffff;
-  --status-rejected: #7a1f2b;
+  --status-rejected: #d9383a;
   --status-rejected-fg: #ffffff;
 
   /* Priority */
-  --priority-critical: #7a1f2b;
-  --priority-high: #a8521e;
-  --priority-normal: #1f4d3a;
-  --priority-low: #5c574e;
+  --priority-critical: #d9383a;
+  --priority-high: #e27d14;
+  --priority-normal: #2e6fff;
+  --priority-low: #8b909a;
 
   /* Feedback */
-  --error: #7a1f2b;
+  --error: #d9383a;
   --error-fg: #ffffff;
-  --ok: #1f4d3a;
+  --ok: #16834a;
 
   /* Geometry */
-  --radius: 4px;
-  --focus-ring: 0 0 0 2px rgba(31, 77, 58, 0.6);
-  --transition: 140ms ease;
+  --radius: 8px;
+  --card-radius: 12px;
+  --focus-ring: 0 0 0 2px rgba(46, 111, 255, 0.4);
+  --transition: 150ms cubic-bezier(0.22, 0.8, 0.24, 1);
+  --shadow-sm: 0 1px 3px rgba(10, 12, 16, 0.04);
+  --shadow-card: 0 2px 8px rgba(10, 12, 16, 0.06), 0 1px 2px rgba(10, 12, 16, 0.04);
 
   /* Typography scale */
-  --font-sans: 'IBM Plex Sans', system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
-  --font-serif: 'Source Serif 4', Georgia, 'Times New Roman', serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-serif: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', monospace;
 
   --body-size: 14px;
   --body-lh: 1.5;
@@ -397,6 +414,42 @@ tbody tr.critical-row td { background: rgba(122,31,43,0.06); }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background: var(--muted-fg); }
+
+/* Pencil Sketch Blueprint Extensions */
+.card,
+article,
+.panel {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--card-radius);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--transition), border-color var(--transition);
+}
+
+.card:hover {
+  border-color: color-mix(in srgb, var(--plot) 30%, var(--line));
+}
+
+.hatch {
+  background-image: repeating-linear-gradient(135deg, rgb(255 255 255 / 0.32) 0 1.5px, transparent 1.5px 6px);
+}
+
+.blueprint-border {
+  border: 1px dashed var(--plot);
+}
+
+.blueprint-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 6px;
+  background: var(--blue-1);
+  color: var(--blue-5);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 4px;
+  border: 1px solid var(--blue-2);
+}
 
 /* Visually hidden */
 .sr-only {
